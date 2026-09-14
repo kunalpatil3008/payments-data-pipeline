@@ -8,6 +8,8 @@ A data engineering project. Two payment systems describe the same transactions i
 
 It found eight kinds of broken data. Six of them produced no error message.
 
+![Overview page](docs/01-overview.png)
+
 ---
 
 ## The problem
@@ -133,7 +135,13 @@ Three pages on a star schema, five relationships, 17 DAX measures.
 | **Worklist** | Which accounts to chase first, ranked by value and by how long they have been sitting |
 | **Data quality** | What is known to be wrong with the data, live from `fct_data_quality_log` |
 
-The third page matters more than it looks. Most dashboards show numbers and stay silent about how trustworthy they are. This one tells you.
+**Worklist.** 108 accounts hold the £187,910 that has not reconciled. No single account is the problem, the largest holds under 3 percent. Sorted by money stuck, with exposure in pounds-days so a small amount stuck for a long time is not missed.
+
+![Worklist page](docs/02-worklist.png)
+
+**Data quality.** Most dashboards show numbers and stay silent about how trustworthy they are. This page does the opposite. Every row is counted live from the warehouse, and says whether the issue was fixed, accepted or escalated.
+
+![Data quality page](docs/03-data-quality.png)
 
 ---
 
