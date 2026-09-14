@@ -1,0 +1,25 @@
+# dbt build output, never commit
+payments_dbt/target/
+payments_dbt/dbt_packages/
+payments_dbt/logs/
+logs/
+
+# secrets, never commit
+.env
+*.env
+profiles.yml
+!.github/ci/profiles.yml
+
+# python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# power bi temp files
+~$*
+*.pbix.tmp
+
+# os junk
+Thumbs.db
+.DS_Store
+desktop.ini

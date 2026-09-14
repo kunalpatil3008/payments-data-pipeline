@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: raw
+    database: PAYMENTS_DEV
+    schema: RAW
+    tables:
+      - name: raw_card_payments
+      - name: raw_bank_payments
+      - name: raw_accounts
+      - name: raw_settlements

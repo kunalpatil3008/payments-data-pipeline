@@ -1,0 +1,18 @@
+# Snowflake connection used by GitHub Actions only.
+# Every value comes from a repository secret. No credential lives in this file.
+# Local runs still use your own ~/.dbt/profiles.yml and are unaffected.
+
+payments_dbt:
+  target: ci
+  outputs:
+    ci:
+      type: snowflake
+      account: "{{ env_var('DBT_SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('DBT_SNOWFLAKE_USER') }}"
+      password: "{{ env_var('DBT_SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('DBT_SNOWFLAKE_ROLE') }}"
+      warehouse: "{{ env_var('DBT_SNOWFLAKE_WAREHOUSE') }}"
+      database: "{{ env_var('DBT_SNOWFLAKE_DATABASE') }}"
+      schema: STAGING
+      threads: 4
+      client_session_keep_alive: false

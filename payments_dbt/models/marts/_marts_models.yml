@@ -1,0 +1,59 @@
+version: 2
+
+models:
+
+  - name: fct_payments
+    description: >
+      One row per payment across both feeds. The grain is a single payment.
+      Left joined to dimensions so no payment can be lost.
+    columns:
+      - name: txn_id
+        tests: [not_null]
+      - name: account_id
+        tests: [not_null]
+      - name: amount_gbp
+        description: Null on 15 bank rows. Use has_amount to exclude them.
+      - name: has_amount
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['settled', 'pending', 'failed', 'reversed']
+
+  - name: dim_accounts
+    description: One row per account, plus an UNKNOWN row for unmatched payments.
+    columns:
+      - name: account_id
+        tests: [unique, not_null]
+
+  - name: dim_dates
+    description: One row per calendar day across the payment period.
+    columns:
+      - name: date_day
+        tests: [unique, not_null]
+
+  - name: fct_settlements
+    description: >
+      One row per settlement with days outstanding and an ageing bucket.
+      Use this table for money. Reason codes stay as an array here.
+    columns:
+      - name: settlement_id
+        tests: [unique, not_null]
+      - name: ageing_bucket
+        tests:
+          - accepted_values:
+              values: ['Reconciled', '0-7 days', '8-30 days', '31+ days']
+      - name: is_reconciled
+        tests: [not_null]
+      - name: days_outstanding
+        tests: [not_null]
+
+  - name: fct_settlement_reasons
+    description: >
+      One row per settlement per reason code. Use for counting reasons only.
+      Summing money here would multiply it - a settlement can hold 3 codes.
+    columns:
+      - name: reason_code
+        tests:
+          - accepted_values:
+              values: ['OK', 'PARTIAL', 'DUP_REF', 'FX_LAG', 'ZERO_DEST_BAL']

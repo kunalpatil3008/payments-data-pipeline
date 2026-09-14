@@ -1,0 +1,31 @@
+version: 2
+
+models:
+
+  - name: int_payments_unioned
+    description: >
+      Card and bank feeds stacked into one table with identical columns.
+      source_system marks which feed each row came from.
+    columns:
+      - name: txn_id
+        tests:
+          - not_null
+
+      - name: posted_date
+        tests:
+          - not_null
+
+      - name: account_id
+        tests:
+          - not_null
+
+      - name: source_system
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['card_acquirer', 'bank_feed']
+
+      - name: currency
+        tests:
+          - accepted_values:
+              values: ['GBP', 'EUR', 'USD']

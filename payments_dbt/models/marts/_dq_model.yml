@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: fct_data_quality_log
+    description: >
+      Live register of every known defect in the source data, with the
+      decision taken and whether it is fixed, accepted, escalated or open.
+      Counts are calculated from the data, not typed, so the page cannot
+      drift out of date.
+    columns:
+      - name: issue
+        tests: [unique, not_null]
+      - name: row_count
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['Fixed', 'Accepted', 'Escalated', 'Open']

@@ -1,0 +1,90 @@
+version: 2
+
+models:
+
+  - name: stg_card_payments
+    description: >
+      Card acquirer feed, cleaned. Whitespace trimmed, currency upper-cased,
+      gross_amount renamed to amount_gbp so it can never be confused with the
+      bank feed's pence. Duplicate txn_ids deduplicated. Unmatched accounts
+      labelled UNKNOWN rather than dropped.
+    columns:
+      - name: txn_id
+        description: Transaction reference. Deduplicated in this model.
+        tests:
+          - unique
+          - not_null
+
+      - name: account_id
+        description: >
+          Account reference, or 'UNKNOWN' where the source pointed at an
+          account that does not exist.
+        tests:
+          - not_null
+
+      - name: is_unknown_account
+        description: True where the source account could not be matched.
+        tests:
+          - not_null
+
+      - name: currency
+        tests:
+          - accepted_values:
+              values: ['GBP', 'EUR', 'USD']
+
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['settled', 'pending', 'failed', 'reversed']
+
+  - name: stg_bank_payments
+    description: >
+      Bank feed, reshaped to match the card feed. Amounts converted from
+      pence to pounds. Status mapped onto the card statuses.
+      ASSUMPTION: RETURNED treated as 'failed'. Not documented at source,
+      needs confirming with the system owner.
+    columns:
+      - name: txn_id
+        tests:
+          - unique
+          - not_null
+
+      - name: amount_gbp
+        description: >
+          Pounds. Source stores pence, divided by 100 here.
+          KNOWN ISSUE: 15 rows arrive with no amount. The payment happened,
+          the value is unknown. Rows are kept so the record is not lost, and
+          excluded from money totals downstream. Warn, not error, because
+          this is a source problem we are tracking, not a defect in this code.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['settled', 'pending', 'failed']
+
+  - name: stg_accounts
+    description: Account dimension, one row per account.
+    columns:
+      - name: account_id
+        tests:
+          - unique
+          - not_null
+      - name: risk_band
+        tests:
+          - accepted_values:
+              values: ['A', 'B', 'C']
+
+  - name: stg_settlements
+    description: Settlement records, unpacked from nested JSON.
+    columns:
+      - name: settlement_id
+        tests:
+          - unique
+          - not_null
+      - name: is_reconciled
+        tests:
+          - not_null
