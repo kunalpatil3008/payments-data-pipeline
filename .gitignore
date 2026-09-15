@@ -23,3 +23,7 @@ __pycache__/
 Thumbs.db
 .DS_Store
 desktop.ini
+
+# removed from the repo, kept locally
+payments_raw.xlsx
+payments_dbt/README.md

@@ -1,65 +1,55 @@
 # Payments Data Pipeline
 
-**Snowflake · dbt · SQL · Power BI**
+Snowflake · dbt · Power BI
 
 [![dbt build](https://github.com/kunalpatil3008/payments-data-pipeline/actions/workflows/dbt.yml/badge.svg)](https://github.com/kunalpatil3008/payments-data-pipeline/actions/workflows/dbt.yml)
 
-A data engineering project. Two payment systems describe the same transactions in different ways. This pipeline loads both, cleans them, tests them, joins them into one trusted table, and reports on them.
+Two systems send the same payments in different formats. This loads both, cleans them, tests them, and reports on them.
 
-It found eight kinds of broken data. Six of them produced no error message.
+Eight things were wrong with the data. Six of them loaded without any error at all.
 
 ![Overview page](docs/01-overview.png)
-
----
 
 ## The problem
 
 A payments team gets two files every day.
 
-One comes from the card machine provider. It uses UK dates, writes currency sometimes as `GBP` and sometimes as `gbp`, and occasionally sends the same transaction reference twice.
+The card machine provider sends one. UK dates, currency written sometimes as `GBP` and sometimes as `gbp`, and now and then the same transaction twice.
 
-The other comes from the bank. It uses ISO dates, different column names, and **amounts in pence, not pounds.**
+The bank sends the other. ISO dates, different column names, and **amounts in pence, not pounds**.
 
-Nothing in either file is labelled as wrong. Both load without a single error. And if you report on them as they are, your totals are a hundred times too big on one side and quietly missing rows on the other.
+Nothing in either file is marked as wrong. Both load fine. But report on them as they are and one side comes out a hundred times too big, while rows quietly go missing from the other.
 
-The job of this pipeline is to make those two files into one table that a finance team can actually trust, and to prove that it is right rather than hope.
+The job is to turn both into one table finance can trust, and to be able to prove it is right rather than hope.
 
----
-
-## How it fits together
+## How it works
 
 ```mermaid
 flowchart LR
-    A[Card feed<br/>CSV, 5,000 rows] --> S[Snowflake RAW]
-    B[Bank feed<br/>CSV, 2,200 rows] --> S
-    C[Accounts<br/>CSV, 120 rows] --> S
-    D[Settlements<br/>JSON, 1,399 rows] --> S
-    S --> ST[dbt staging<br/>clean each source]
-    ST --> INT[dbt intermediate<br/>union into one shape]
-    INT --> M[dbt marts<br/>facts and dimensions]
-    M --> P[Power BI<br/>3 pages, 17 measures]
+    A[Card feed<br/>5,000 rows] --> S[Snowflake RAW]
+    B[Bank feed<br/>2,200 rows] --> S
+    C[Accounts<br/>120 rows] --> S
+    D[Settlements JSON<br/>1,399 rows] --> S
+    S --> ST[Staging<br/>clean each source]
+    ST --> INT[Intermediate<br/>stack them together]
+    INT --> M[Marts<br/>facts and dimensions]
+    M --> P[Power BI<br/>3 pages]
     M --> T[38 tests]
 ```
 
-Four sources in, one star schema out.
+Four files in, one star schema out, in four steps.
 
----
+**Raw.** Everything lands exactly as it arrived. Nothing cleaned, nothing edited. If someone questions a number next month, this is what proves what the source actually sent.
 
-## The four layers, and why each exists
+**Staging.** One model per file. Trim the spaces off account IDs, force currency to upper case, divide the bank amounts by 100, cast the dates properly. Small jobs, easy to check.
 
-**RAW.** Everything lands exactly as it arrived. Nothing is cleaned here and nothing is edited. If a number looks wrong three weeks later, this is the layer that proves what the source actually sent.
+**Intermediate.** Both cleaned sources get turned into the same shape and stacked. This is the only place that knows the two feeds are different.
 
-**STAGING.** One model per source file. Trim the spaces off account IDs, force currency to upper case, divide the bank amounts by 100, cast the dates properly. One file, one job, easy to check.
-
-**INTERMEDIATE.** Both cleaned sources become one shape and get stacked together. This is the only place that knows the two feeds are different.
-
-**MARTS.** The tables people actually use. Facts for the events, dimensions for the things the events are about.
-
----
+**Marts.** The tables people actually use. Facts for the events, dimensions for the things those events are about.
 
 ## What is in the warehouse
 
-**11 dbt models**
+11 models:
 
 | Layer | Models |
 |---|---|
@@ -67,97 +57,82 @@ Four sources in, one star schema out.
 | Intermediate | `int_payments_unioned` |
 | Marts | `fct_payments`, `fct_settlements`, `fct_settlement_reasons`, `fct_data_quality_log`, `dim_accounts`, `dim_dates` |
 
-**38 tests.** 36 built in (`unique`, `not_null`, `relationships`, `accepted_values`) and 2 written by hand:
+38 tests. Most are the standard ones, `unique`, `not_null`, `relationships`, `accepted_values`. Two I wrote by hand:
 
-- `assert_union_did_not_fan_out` — the row count after the join must equal the row count before it
-- `assert_fact_matches_source` — the fact table must hold the same number of rows the sources sent
+- the row count after the join has to match the row count before it
+- the fact table has to hold the same number of rows the sources sent
 
-Latest run: **47 pass, 1 warn, 0 errors.**
+Last run: **47 pass, 1 warn, 0 errors.**
 
----
+## What it caught
 
-## What the pipeline caught
-
-This is the part worth reading.
-
-| What was wrong | Rows | What was done | Why |
+| What was wrong | Rows | What I did | Why |
 |---|---|---|---|
-| Same transaction sent twice | 18 | Removed, first kept | Duplicates inflate money totals on every join |
+| Same transaction sent twice | 18 | Removed, kept the first | Duplicates inflate money totals on every join |
 | Currency as `GBP` and `gbp` | 845 | Forced to upper case | A GROUP BY splits one currency into two |
 | Account IDs with trailing spaces | 30 | Trimmed in staging | Invisible padding, so rows silently fail to match |
-| Account reference does not exist | 25 | Kept, labelled UNKNOWN | Real money. Dropping it makes the answer quietly incomplete |
-| Payment sent with no amount | 53 | Kept, left out of money totals | A missing amount is not an amount of nothing |
-| Marked settled, never reconciled | 123 (£69,905) | Flagged, raised with the source owner | A field that disagrees with itself cannot be trusted to prioritise work |
-| Dated outside the stated quarter | 226 | Under investigation | Either a source error or the file covers more than it claims |
+| Account that does not exist | 25 | Kept, labelled UNKNOWN | Real money. Dropping it makes the answer quietly incomplete |
+| Payment with no amount | 53 | Kept, left out of money totals | A missing amount is not an amount of nothing |
+| Marked settled, never reconciled | 123 (£69,905) | Flagged and raised | A field that disagrees with itself cannot be trusted |
+| Dated outside the stated quarter | 226 | Still investigating | Either a source error or the file covers more than it claims |
 | **Bank amounts in pence** | all 2,200 | Divided by 100 | Nothing catches this. It loads fine and is wrong by 100x |
 
-Two of these are the interesting ones.
+Two of those are worth pointing at.
 
-**The trailing spaces.** `"ACC001 "` and `"ACC001"` are different strings. The join simply does not match, no error is raised, and thirty payments disappear from a report that otherwise looks completely normal.
+**The trailing spaces.** `"ACC001 "` and `"ACC001"` are different strings. The join just does not match. No error is raised. Thirty payments disappear from a report that otherwise looks completely normal.
 
-**The pence.** No test can find this. Both columns are valid numbers. The only thing that catches it is reading the spec and noticing that one system talks in pence. It would have overstated the bank feed by a factor of one hundred.
+**The pence.** No test can find this one. Both columns hold perfectly valid numbers. The only thing that catches it is reading the spec and noticing that one system counts in pence. Left alone it overstates the bank feed a hundred times over.
 
-The lesson this project is built around:
+Which is the point of the whole project:
 
-> **A successful load proves the file was readable. It proves nothing about whether the data is right.**
+> A file loading successfully only proves it was readable. It says nothing about whether the data is right.
 
----
+## Fix what is wrong, keep what is incomplete
 
-## Wrong gets fixed, incomplete gets kept
+Every problem above got one of two treatments, and the choice was deliberate.
 
-Every defect above got one of two treatments, and the choice was deliberate.
+If the data is **wrong**, fix it. Duplicates, spaces, mixed case, pence. There is a correct value and the pipeline produces it.
 
-If the data is **wrong**, fix it. Duplicates, spaces, mixed case, pence. These have a correct value and the pipeline produces it.
+If the data is **incomplete**, keep it and label it. Missing amounts, unknown accounts. There is no correct value to guess at. Deleting those rows makes the report look tidy and the answer wrong, because a payment that happened still happened.
 
-If the data is **incomplete**, keep it and label it. Missing amounts, unknown accounts. These have no correct value to guess. Deleting the row makes the report look clean and quietly makes the answer wrong, because a payment that happened is still a payment that happened.
+The dashboard shows both, and says which is which.
 
-The report shows both, and says which is which.
+## The data quality page is built from the data
 
----
+`fct_data_quality_log` counts every issue straight from the warehouse.
 
-## The data quality register is a model, not a list
+That is on purpose. A hand-typed list of known problems is right on the day you write it and wrong a month later. This one cannot drift, because there is nothing to update.
 
-`fct_data_quality_log` counts every defect straight from the data.
+It proved itself immediately. My typed version said 15 missing amounts. The model said 53, because the typed number only covered the bank feed and the fact table holds both.
 
-That is on purpose. A hand-typed table of known issues is correct on the day you write it and wrong a month later. This one cannot drift, because there is nothing to update.
+## The dashboard
 
-It proved its worth immediately. A typed version said 15 missing amounts. The live model said 53, because the typed number only counted the bank feed and the fact table holds both.
-
----
-
-## Power BI
-
-Three pages on a star schema, five relationships, 17 DAX measures.
-
-| Page | What it answers |
-|---|---|
-| **Overview** | How much money moved, how much is stuck, is it getting better or worse |
-| **Worklist** | Which accounts to chase first, ranked by value and by how long they have been sitting |
-| **Data quality** | What is known to be wrong with the data, live from `fct_data_quality_log` |
-
-**Worklist.** 108 accounts hold the £187,910 that has not reconciled. No single account is the problem, the largest holds under 3 percent. Sorted by money stuck, with exposure in pounds-days so a small amount stuck for a long time is not missed.
+**Who to chase first.** 108 accounts hold the £187,910 that has not reconciled. No single account is the problem, the biggest holds under 3%. Sorted by money stuck, with exposure in pounds-days so a small amount sitting for months does not get missed.
 
 ![Worklist page](docs/02-worklist.png)
 
-**Data quality.** Most dashboards show numbers and stay silent about how trustworthy they are. This page does the opposite. Every row is counted live from the warehouse, and says whether the issue was fixed, accepted or escalated.
+**What we know is wrong.** Most dashboards show numbers and say nothing about whether you should believe them. This page does the opposite. Seven known issues, counted live, each marked fixed, accepted, open or escalated.
 
 ![Data quality page](docs/03-data-quality.png)
 
----
+## It runs on its own
 
-## Automation
+A GitHub Actions job runs `dbt build` on every push and again every night. If a model breaks or a test fails, the build goes red and an email goes out, instead of a wrong number turning up in a report that nobody questions.
 
-A GitHub Actions workflow runs `dbt build` on every push and again every night.
+## What is in each folder
 
-If a model breaks or a data test fails, the build turns red and an email goes out. A failure shows up as a failed build instead of as a wrong number that nobody noticed.
+| Folder | What is in it |
+|---|---|
+| `data/` | The four source files, deliberately messy |
+| `snowflake/` | The SQL for loading and exploring the raw data |
+| `payments_dbt/` | The dbt project. Models, tests, macros |
+| `docs/` | Dashboard screenshots |
+| `.github/` | The nightly build |
 
----
-
-## Running it yourself
+## Running it
 
 ```bash
 cd payments_dbt
-dbt deps
 dbt build          # runs every model, then every test
 dbt docs generate  # builds the lineage graph
 dbt docs serve
@@ -174,26 +149,16 @@ DBT_SNOWFLAKE_WAREHOUSE
 DBT_SNOWFLAKE_DATABASE
 ```
 
----
-
-## What this does not do yet
+## What it does not do yet
 
 Being straight about the edges.
 
-- **No Airflow.** Scheduling is GitHub Actions. At this volume a full orchestrator is not justified, though it is the natural next step.
-- **No incremental models.** Everything rebuilds from scratch. Fine at 7,200 rows, wrong at 7 million.
-- **Small data.** The defects here are real. The scale is not.
+No Airflow. Scheduling is GitHub Actions, which is enough at this size, though an orchestrator is the obvious next step.
+
+No incremental models. Everything rebuilds from scratch. Fine at 7,200 rows, wrong at 7 million.
+
+The defects here are real. The scale is not.
 
 ---
 
-## Questions this project answers
-
-1. Walk me through a pipeline you have built
-2. What is silent fan out and how did you catch it
-3. Tell me about a data quality bug you found
-4. How do you handle two sources describing the same thing differently
-5. When do you fix bad data and when do you keep it
-
----
-
-Built by **Kunal Patil** · [LinkedIn](https://www.linkedin.com/in/kunalpatil3008) · [GitHub](https://github.com/kunalpatil3008)
+Built by Kunal Patil · [LinkedIn](https://www.linkedin.com/in/kunalpatil3008) · [GitHub](https://github.com/kunalpatil3008)
